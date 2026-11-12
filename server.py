@@ -15,6 +15,9 @@ def run_server() -> None:
     Accept client connections, buffer incoming data and process
     RESP commands until the client disconnects or sends malformed data.
     """
+
+    database: dict[bytes, bytes] = {}
+
     with socket.socket() as server_socket:
         address = "0.0.0.0"
         port = 6379
@@ -85,6 +88,19 @@ def run_server() -> None:
                                     else:
                                         response = format_resp_bulk_string(command_elements[1])
 
+                                case b"GET":
+                                    if len(command_elements) != 2:
+                                        response = format_resp_error("ERR wrong number of arguments for 'get' command")
+                                    else:
+                                        response = format_resp_bulk_string(handle_get(command_elements[1], database))
+
+                                case b"SET":
+                                    if len(command_elements) != 3:
+                                        response = format_resp_error("ERR wrong number of arguments for 'set' command")
+                                    else:
+                                        handle_set(command_elements[1], command_elements[2], database)
+                                        response = format_resp_simple_string("OK")
+
                                 case _:
                                     response = format_resp_error("ERR Unknown command!")
 
@@ -104,9 +120,9 @@ def format_resp_simple_string(message: str) -> bytes:
     return f"+{message}\r\n".encode()
 
 
-def format_resp_bulk_string(payload: bytes) -> bytes:
-    """Encode a message as a RESP Bulk String."""
-    return (b"$%d\r\n" % len(payload)) + payload + b"\r\n"
+def format_resp_bulk_string(payload: bytes | None) -> bytes:
+    """Encode a message as a RESP Bulk String or Null Bulk String."""
+    return (b"$%d\r\n" % len(payload)) + payload + b"\r\n" if payload is not None else b"$-1\r\n"
 
 
 def format_resp_error(message: str) -> bytes:
@@ -192,6 +208,16 @@ def parse_resp_command(buffer: bytes) -> tuple[list[bytes], int] | None:
         return elements, position
 
     raise ValueError("Invalid RESP format")
+
+
+def handle_get(key: bytes, database: dict[bytes, bytes]) -> bytes | None:
+    """Return the value associated with the key, or None if it does not exist."""
+    return database.get(key)
+
+
+def handle_set(key: bytes, value: bytes, database: dict[bytes, bytes]) -> bytes | None:
+    """Store a key-value pair, overwriting any existing value."""
+    database[key] = value
 
 
 if __name__ == "__main__":
