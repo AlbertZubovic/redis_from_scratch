@@ -1,5 +1,6 @@
 import logging
 import socket
+import time
 
 from typing import Final
 
@@ -12,11 +13,13 @@ def run_server() -> None:
     """
     Start the Redis-compatible TCP server.
 
-    Accept client connections, buffer incoming data and process
-    RESP commands until the client disconnects or sends malformed data.
+    Accept client connections, parse RESP commands and manage a shared
+    in-memory key-value database with optional key expiration.
+
+    Close client connections when they disconnect or send malformed data.
     """
 
-    database: dict[bytes, bytes] = {}
+    database: dict[bytes, tuple[bytes, float | None]] = {}
 
     with socket.socket() as server_socket:
         address = "0.0.0.0"
@@ -95,11 +98,26 @@ def run_server() -> None:
                                         response = format_resp_bulk_string(handle_get(command_elements[1], database))
 
                                 case b"SET":
-                                    if len(command_elements) != 3:
-                                        response = format_resp_error("ERR wrong number of arguments for 'set' command")
-                                    else:
+                                    if len(command_elements) == 3:
                                         handle_set(command_elements[1], command_elements[2], database)
                                         response = format_resp_simple_string("OK")
+                                    elif len(command_elements) == 5:
+                                        if command_elements[3].upper() != "EX":
+                                            response = format_resp_error("ERR Unknown command!")
+                                        else:
+                                            try:
+                                                handle_set(command_elements[1], command_elements[2], database, command_elements[4])
+                                                response = format_resp_simple_string("OK")
+                                            except ValueError:
+                                                response = format_resp_error("ERR value is not an integer or out of range")
+                                    else:
+                                        response = format_resp_error("ERR wrong number of arguments for 'set' command")
+
+                                case b"DEL":
+                                    if len(command_elements) < 2:
+                                        response = format_resp_error("ERR wrong number of arguments for 'del' command")
+                                    else:
+                                        response = format_resp_integer(handle_del(command_elements[1:], database))
 
                                 case _:
                                     response = format_resp_error("ERR Unknown command!")
@@ -117,17 +135,26 @@ def run_server() -> None:
 # Helpers
 def format_resp_simple_string(message: str) -> bytes:
     """Encode a message as a RESP Simple String."""
+
     return f"+{message}\r\n".encode()
 
 
 def format_resp_bulk_string(payload: bytes | None) -> bytes:
     """Encode a message as a RESP Bulk String or Null Bulk String."""
+
     return (b"$%d\r\n" % len(payload)) + payload + b"\r\n" if payload is not None else b"$-1\r\n"
 
 
 def format_resp_error(message: str) -> bytes:
     """Encode a message as a RESP Simple Error."""
+
     return f"-{message}\r\n".encode()
+
+
+def format_resp_integer(value: int) -> bytes:
+    """Encode a message as a RESP Integer."""
+
+    return f":{value}\r\n".encode()
 
 
 def parse_resp_command(buffer: bytes) -> tuple[list[bytes], int] | None:
@@ -210,14 +237,85 @@ def parse_resp_command(buffer: bytes) -> tuple[list[bytes], int] | None:
     raise ValueError("Invalid RESP format")
 
 
-def handle_get(key: bytes, database: dict[bytes, bytes]) -> bytes | None:
-    """Return the value associated with the key, or None if it does not exist."""
-    return database.get(key)
+def handle_get(key: bytes, database: dict[bytes, tuple[bytes, float | None]]) -> bytes | None:
+    """Return a key's value, removing expired entries and returning None if absent."""
+
+    entry = database.get(key)
+
+    if entry is None:
+        return None
+
+    value, expiration = entry
+
+    if is_key_expired(expiration):
+        del database[key]
+        logging.debug("Key expired and removed: key=%r", key)
+        return None
+
+    logging.debug("GET key=%r: value retrieved", key)
+
+    return value
 
 
-def handle_set(key: bytes, value: bytes, database: dict[bytes, bytes]) -> bytes | None:
-    """Store a key-value pair, overwriting any existing value."""
-    database[key] = value
+def handle_set(key: bytes, value: bytes, database: dict[bytes, tuple[bytes, float | None]], expiration: bytes | None = None) -> None:
+    """
+    Store a key-value pair, overwriting any existing value and expiration.
+
+    Args:
+        key: Key to store.
+        value: Value associated with the key.
+        database: Shared in-memory database.
+        expiration: Optional expiration duration in seconds, encoded as bytes.
+
+    Raises:
+        ValueError: If the expiration argument is invalid.
+    """
+
+    if expiration is None:
+        database[key] = (value, None)
+    else:
+        expiration_time = expiration.decode()
+        if expiration_time.isdigit():
+            database[key] = (value, time.monotonic() + int(expiration_time))
+            logging.debug("SET key=%r: value stored", key)
+        else:
+            raise ValueError()
+
+
+def handle_del(keys: list[bytes], database: dict[bytes, tuple[bytes, float | None]]) -> int:
+    """
+    Delete the specified keys and return the number of keys removed.
+
+    Expired and nonexistent keys are not counted.
+    Expired entries encountered during deletion are also removed.
+    """
+
+    deleted_count = 0
+
+    for key in keys:
+
+        entry = database.get(key)
+
+        if entry is None:
+            continue
+
+        expiration = entry[1]
+
+        if is_key_expired(expiration):
+            del database[key]
+            logging.debug("Key expired and removed: key=%r", key)
+            continue
+
+        del database[key]
+        deleted_count += 1
+        logging.debug("DEL key=%r: key deleted", key)
+
+    return deleted_count
+
+
+def is_key_expired(expiration: float | None) -> bool:
+    """Return whether the expiration deadline has passed."""
+    return expiration is not None and expiration <= time.monotonic()
 
 
 if __name__ == "__main__":
