@@ -1,5 +1,6 @@
 import logging
 import socket
+import threading
 import time
 
 from typing import Final
@@ -13,13 +14,13 @@ def run_server() -> None:
     """
     Start the Redis-compatible TCP server.
 
-    Accept client connections, parse RESP commands and manage a shared
-    in-memory key-value database with optional key expiration.
-
-    Close client connections when they disconnect or send malformed data.
+    Accept client connections in separate threads, maintain a shared
+    in-memory database and stop when shutdown is requested.
     """
 
     database: dict[bytes, tuple[bytes, float | None]] = {}
+    database_lock = threading.Lock()
+    shutdown_event = threading.Event()
 
     with socket.socket() as server_socket:
         address = "0.0.0.0"
@@ -32,107 +33,129 @@ def run_server() -> None:
         logging.info("Server listening on %s:%d", address, port)
         server_socket.listen(5)
 
-        while True:
-            client_socket, client_address = server_socket.accept()
-            with client_socket:
-                logging.info("Accepted connection from client %s:%d", client_address[0], client_address[1])
-                buffer = b""
+        # Periodically unblock accept() to check for shutdown requests
+        server_socket.settimeout(1.0)
 
-                close_connection = False
+        while not shutdown_event.is_set():
+            try:
+                client_socket, client_address = server_socket.accept()
+            except socket.timeout:
+                continue
 
-                # Process all complete commands before receiving more data.
-                while True:
-                    try:
-                        received_data = client_socket.recv(1024)
-
-                        if not received_data:
-                            logging.info("Client %s:%d disconnected", client_address[0], client_address[1])
-                            break
-
-                        buffer += received_data
-
-                        if len(buffer) > MAX_BUFFER_SIZE:
-                            client_socket.sendall(b"-Parsing error!\r\n")
-                            break
-
-                        while True:
-
-                            try:
-                                result = parse_resp_command(buffer)
-                            except ValueError:
-                                client_socket.sendall(b"-Parsing error!\r\n")
-                                close_connection = True
-                                break
-
-                            if result is None:
-                                break
-
-                            command_elements, byte_count = result
-                            buffer = buffer[byte_count:]
-                            command = command_elements[0].upper()
-
-                            match command:
-
-                                case b"PING":
-                                    if len(command_elements) > 2:
-                                        response = format_resp_error("ERR wrong number of arguments for 'ping' command")
-                                    elif len(command_elements) == 1:
-                                        response = format_resp_simple_string("PONG")
-                                    else:
-                                        response = format_resp_bulk_string(command_elements[1])
-
-                                case b"EXIT":
-                                    logging.info("Server shutting down")
-                                    return
-
-                                case b"ECHO":
-                                    if len(command_elements) != 2:
-                                        response = format_resp_error("ERR wrong number of arguments for 'echo' command")
-                                    else:
-                                        response = format_resp_bulk_string(command_elements[1])
-
-                                case b"GET":
-                                    if len(command_elements) != 2:
-                                        response = format_resp_error("ERR wrong number of arguments for 'get' command")
-                                    else:
-                                        response = format_resp_bulk_string(handle_get(command_elements[1], database))
-
-                                case b"SET":
-                                    if len(command_elements) == 3:
-                                        handle_set(command_elements[1], command_elements[2], database)
-                                        response = format_resp_simple_string("OK")
-                                    elif len(command_elements) == 5:
-                                        if command_elements[3].upper() != "EX":
-                                            response = format_resp_error("ERR Unknown command!")
-                                        else:
-                                            try:
-                                                handle_set(command_elements[1], command_elements[2], database, command_elements[4])
-                                                response = format_resp_simple_string("OK")
-                                            except ValueError:
-                                                response = format_resp_error("ERR value is not an integer or out of range")
-                                    else:
-                                        response = format_resp_error("ERR wrong number of arguments for 'set' command")
-
-                                case b"DEL":
-                                    if len(command_elements) < 2:
-                                        response = format_resp_error("ERR wrong number of arguments for 'del' command")
-                                    else:
-                                        response = format_resp_integer(handle_del(command_elements[1:], database))
-
-                                case _:
-                                    response = format_resp_error("ERR Unknown command!")
-
-                            client_socket.sendall(response)
-
-                        if close_connection:
-                            break
-
-                    except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError) as e:
-                        logging.warning("Client connection lost: %s", e)
-                        break
+            client_thread = threading.Thread(target=handle_client, args=(client_socket, client_address, database, shutdown_event, database_lock), daemon=True)
+            client_thread.start()
 
 
 # Helpers
+def handle_client(client_socket: socket.socket, client_address: tuple[str, int], database: dict[bytes, tuple[bytes, float | None]], shutdown_event: threading.Event, database_lock: threading.Lock) -> None:
+    """
+    Handle RESP commands from a connected client.
+
+    Synchronize access to the shared database, signal server shutdown
+    when EXIT is received and close the client connection on exit.
+    """
+
+    with client_socket:
+        logging.info("Accepted connection from client %s:%d", client_address[0], client_address[1])
+        buffer = b""
+
+        while True:
+            try:
+                received_data = client_socket.recv(1024)
+
+                if not received_data:
+                    logging.info("Client %s:%d disconnected", client_address[0], client_address[1])
+                    return
+
+                buffer += received_data
+
+                if len(buffer) > MAX_BUFFER_SIZE:
+                    client_socket.sendall(b"-Parsing error!\r\n")
+                    return
+
+                # Process all complete commands before receiving more data.
+                while True:
+
+                    try:
+                        result = parse_resp_command(buffer)
+                    except ValueError:
+                        client_socket.sendall(b"-Parsing error!\r\n")
+                        return
+
+                    if result is None:
+                        break
+
+                    command_elements, byte_count = result
+                    buffer = buffer[byte_count:]
+                    command = command_elements[0].upper()
+
+                    match command:
+
+                        case b"PING":
+                            if len(command_elements) > 2:
+                                response = format_resp_error("ERR wrong number of arguments for 'ping' command")
+                            elif len(command_elements) == 1:
+                                response = format_resp_simple_string("PONG")
+                            else:
+                                response = format_resp_bulk_string(command_elements[1])
+
+                        case b"EXIT":
+                            logging.info("Server shutting down")
+                            shutdown_event.set()
+                            return
+
+                        case b"ECHO":
+                            if len(command_elements) != 2:
+                                response = format_resp_error("ERR wrong number of arguments for 'echo' command")
+                            else:
+                                response = format_resp_bulk_string(command_elements[1])
+
+                        case b"GET":
+                            if len(command_elements) != 2:
+                                response = format_resp_error("ERR wrong number of arguments for 'get' command")
+                            else:
+                                with database_lock:
+                                    value = handle_get(command_elements[1], database)
+
+                                response = format_resp_bulk_string(value)
+
+                        case b"SET":
+                            if len(command_elements) == 3:
+                                with database_lock:
+                                    handle_set(command_elements[1], command_elements[2], database)
+                                response = format_resp_simple_string("OK")
+                            elif len(command_elements) == 5:
+                                if command_elements[3].upper() != b"EX":
+                                    response = format_resp_error("ERR Unknown command!")
+                                else:
+                                    try:
+                                        with database_lock:
+                                            handle_set(command_elements[1], command_elements[2], database, command_elements[4])
+                                        response = format_resp_simple_string("OK")
+                                    except ValueError:
+                                        response = format_resp_error("ERR value is not an integer or out of range")
+                            else:
+                                response = format_resp_error("ERR wrong number of arguments for 'set' command")
+
+                        case b"DEL":
+                            if len(command_elements) < 2:
+                                response = format_resp_error("ERR wrong number of arguments for 'del' command")
+                            else:
+                                with database_lock:
+                                    value = handle_del(command_elements[1:], database)
+
+                                response = format_resp_integer(value)
+
+                        case _:
+                            response = format_resp_error("ERR Unknown command!")
+
+                    client_socket.sendall(response)
+
+            except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError) as e:
+                logging.warning("Client connection lost: %s", e)
+                break
+
+
 def format_resp_simple_string(message: str) -> bytes:
     """Encode a message as a RESP Simple String."""
 
@@ -277,9 +300,9 @@ def handle_set(key: bytes, value: bytes, database: dict[bytes, tuple[bytes, floa
         expiration_time = expiration.decode()
         if expiration_time.isdigit():
             database[key] = (value, time.monotonic() + int(expiration_time))
-            logging.debug("SET key=%r: value stored", key)
         else:
             raise ValueError()
+    logging.debug("SET key=%r: value stored", key)
 
 
 def handle_del(keys: list[bytes], database: dict[bytes, tuple[bytes, float | None]]) -> int:
