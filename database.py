@@ -1,3 +1,5 @@
+"""Implement Redis key-value database operations."""
+
 import logging
 import time
 

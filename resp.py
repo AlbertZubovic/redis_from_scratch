@@ -1,3 +1,5 @@
+"""Parse and encode Redis Serialization Protocol messages."""
+
 from typing import Final
 
 MAX_BULK_STRING_SIZE: Final[int] = 1024 * 1024
@@ -105,3 +107,15 @@ def format_resp_integer(value: int) -> bytes:
     """Encode a message as a RESP Integer."""
 
     return f":{value}\r\n".encode()
+
+def format_resp_array(*elements: bytes | int | None) -> bytes:
+    """Encode bulk strings, integers and null bulk strings as a RESP array."""
+
+    message = f"*{len(elements)}\r\n".encode()
+
+    for element in elements:
+        if isinstance(element, int):
+            message += format_resp_integer(element)
+        message += format_resp_bulk_string(element)
+
+    return message
