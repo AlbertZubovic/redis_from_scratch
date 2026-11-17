@@ -1,0 +1,29 @@
+
+name: Python Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: python -m pip install pytest
+
+      - name: Run unit tests
+        run: |
+          python -m pytest tests/server/ tests/test_connection.py tests/test_database.py tests/test_pubsub.py tests/test_resp.py -v
+
+      - name: Run integration tests
+        run: python -m pytest tests/integration/ -v

@@ -1,5 +1,6 @@
 """Manage Redis Pub/Sub channel subscriptions."""
 
+import logging
 import threading
 
 from connection import ClientConnection
@@ -24,7 +25,9 @@ class PubSub:
     def subscribe(self, channel_name: bytes, client: ClientConnection) -> None:
         """Subscribe a client to a channel, creating it if necessary."""
         with self.lock:
-            self.channels.setdefault(channel_name, set()).add(client)
+            subscribers = self.channels.setdefault(channel_name, set())
+            subscribers.add(client)
+            logging.debug("Client subscribed to channel %r (%d subscribers)", channel_name, len(subscribers))
 
     def unsubscribe(self, channel_name: bytes, client: ClientConnection) -> None:
         """Remove a client from a channel if subscribed."""
@@ -36,8 +39,11 @@ class PubSub:
 
             subscribers.discard(client)
 
+            logging.debug("Client unsubscribed from channel %r (%d subscribers remaining)",channel_name, len(subscribers))
+
             if not subscribers:
                 del self.channels[channel_name]
+                logging.debug("Removed empty channel %r", channel_name)
 
     def get_subscribers(self, channel_name: bytes) -> set[ClientConnection]:
         """Return a copy of the channel's subscribers."""

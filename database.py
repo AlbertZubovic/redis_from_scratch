@@ -41,7 +41,11 @@ def handle_set(key: bytes, value: bytes, database: dict[bytes, tuple[bytes, floa
     if expiration is None:
         database[key] = (value, None)
     else:
+        if not isinstance(expiration, bytes):
+            raise ValueError()
+
         expiration_time = expiration.decode()
+
         if expiration_time.isdigit():
             database[key] = (value, time.monotonic() + int(expiration_time))
         else:

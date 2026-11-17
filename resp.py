@@ -116,6 +116,7 @@ def format_resp_array(*elements: bytes | int | None) -> bytes:
     for element in elements:
         if isinstance(element, int):
             message += format_resp_integer(element)
-        message += format_resp_bulk_string(element)
+        else:
+            message += format_resp_bulk_string(element)
 
     return message

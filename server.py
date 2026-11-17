@@ -13,7 +13,7 @@ from connection import ClientConnection
 MAX_BUFFER_SIZE: Final[int] = 1024 * 1024
 
 
-def run_server() -> None:
+def run_server(port: int = 6379, shutdown_event: threading.Event | None = None) -> None:
     """
     Start the Redis-compatible TCP server.
 
@@ -24,11 +24,9 @@ def run_server() -> None:
     database_store: dict[bytes, tuple[bytes, float | None]] = {}
     database_lock = threading.Lock()
     pubsub_manager = pubsub.PubSub()
-    shutdown_event = threading.Event()
 
     with socket.socket() as server_socket:
         address = "0.0.0.0"
-        port = 6379
 
         # Allow the server to reuse the port shortly after restarting
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -77,6 +75,7 @@ def handle_client(client_socket: socket.socket, client_address: tuple[str, int],
                     buffer += received_data
 
                     if len(buffer) > MAX_BUFFER_SIZE:
+                        logging.warning("Client %s:%d exceeded maximum buffer size", *client_address)
                         client.send(b"-Parsing error!\r\n")
                         return
 
@@ -86,6 +85,7 @@ def handle_client(client_socket: socket.socket, client_address: tuple[str, int],
                         try:
                             result = resp.parse_resp_command(buffer)
                         except ValueError:
+                            logging.warning("Invalid RESP data from client %s:%d", *client_address)
                             client.send(b"-Parsing error!\r\n")
                             return
 
@@ -206,11 +206,14 @@ def handle_client(client_socket: socket.socket, client_address: tuple[str, int],
 
                                         subscribers = pubsub_manager.get_subscribers(channel_name)
 
+                                        logging.debug("Publishing to channel %r (%d subscribers)",channel_name,len(subscribers))
+
                                         notification = resp.format_resp_array(b"message", channel_name, message)
                                         for subscriber in subscribers:
                                             try:
                                                 subscriber.send(notification)
-                                            except OSError:
+                                            except OSError as e:
+                                                logging.warning("Failed to deliver message to channel %r: %s", channel_name, e)
                                                 pubsub_manager.unsubscribe(channel_name, subscriber)
 
                                         response = resp.format_resp_integer(len(subscribers))
