@@ -11,7 +11,7 @@ from server import run_server
 @pytest.fixture
 def test_server() -> Iterator[tuple[str, int]]:
     host = "127.0.0.1"
-    port = 6380
+    port = 6379
     shutdown_event = threading.Event()
 
     server_thread = threading.Thread(
