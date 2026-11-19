@@ -23,13 +23,14 @@ def test_send(mock_client_connection: tuple[MagicMock, ClientConnection]) -> Non
     mock_socket.sendall.assert_called_once_with(b"hello")
 
 
-def test_send_concurrent(mock_client_connection: tuple[MagicMock, ClientConnection]) -> None:
+def test_send_concurrent(
+    mock_client_connection: tuple[MagicMock, ClientConnection],
+) -> None:
     mock_socket, connection = mock_client_connection
 
     first_entered = threading.Event()
     release_first = threading.Event()
     second_entered = threading.Event()
-
 
     def fake_sendall(data: bytes) -> None:
         if data == b"Hello":
@@ -38,7 +39,6 @@ def test_send_concurrent(mock_client_connection: tuple[MagicMock, ClientConnecti
 
         elif data == b"World":
             second_entered.set()
-
 
     mock_socket.sendall.side_effect = fake_sendall
 
@@ -68,7 +68,9 @@ def test_send_concurrent(mock_client_connection: tuple[MagicMock, ClientConnecti
     assert mock_socket.sendall.call_count == 2
 
 
-def test_send_uses_lock(mock_client_connection: tuple[MagicMock, ClientConnection]) -> None:
+def test_send_uses_lock(
+    mock_client_connection: tuple[MagicMock, ClientConnection],
+) -> None:
     mock_socket, connection = mock_client_connection
 
     mock_lock = MagicMock()

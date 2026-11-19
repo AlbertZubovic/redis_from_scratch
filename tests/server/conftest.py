@@ -29,7 +29,9 @@ def mock_client() -> dict[str, Any]:
 
 
 @pytest.fixture
-def run_command(server_state: dict[str, Any], mock_client: dict[str, Any]) -> Callable[[bytes], MagicMock]:
+def run_command(
+    server_state: dict[str, Any], mock_client: dict[str, Any]
+) -> Callable[[bytes], MagicMock]:
     def _run(command: bytes) -> MagicMock:
         mock_socket = mock_client["client_socket"]
 

@@ -3,6 +3,7 @@
 import socket
 import threading
 
+
 class ClientConnection:
     def __init__(self, client_socket: socket.socket) -> None:
         self.socket = client_socket

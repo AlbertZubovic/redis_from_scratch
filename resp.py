@@ -46,7 +46,7 @@ def parse_resp_command(buffer: bytes) -> tuple[list[bytes], int] | None:
             if position >= len(buffer):
                 return None
 
-            if buffer[position:position + 1] != b"$":
+            if buffer[position : position + 1] != b"$":
                 raise ValueError("Invalid RESP format")
 
             length_header_end = buffer.find(b"\r\n", position)
@@ -54,7 +54,7 @@ def parse_resp_command(buffer: bytes) -> tuple[list[bytes], int] | None:
             if length_header_end == -1:
                 return None
 
-            payload_length_bytes = buffer[position + 1:length_header_end]
+            payload_length_bytes = buffer[position + 1 : length_header_end]
 
             if not payload_length_bytes.isdigit():
                 raise ValueError("Invalid RESP format")
@@ -72,7 +72,7 @@ def parse_resp_command(buffer: bytes) -> tuple[list[bytes], int] | None:
             if len(buffer) < payload_end + 2:
                 return None
 
-            if buffer[payload_end:payload_end + 2] != b"\r\n":
+            if buffer[payload_end : payload_end + 2] != b"\r\n":
                 raise ValueError("Invalid RESP format")
 
             elements.append(buffer[position:payload_end])
@@ -94,7 +94,11 @@ def format_resp_simple_string(message: str) -> bytes:
 def format_resp_bulk_string(payload: bytes | None) -> bytes:
     """Encode a message as a RESP Bulk String or Null Bulk String."""
 
-    return (b"$%d\r\n" % len(payload)) + payload + b"\r\n" if payload is not None else b"$-1\r\n"
+    return (
+        (b"$%d\r\n" % len(payload)) + payload + b"\r\n"
+        if payload is not None
+        else b"$-1\r\n"
+    )
 
 
 def format_resp_error(message: str) -> bytes:
@@ -107,6 +111,7 @@ def format_resp_integer(value: int) -> bytes:
     """Encode a message as a RESP Integer."""
 
     return f":{value}\r\n".encode()
+
 
 def format_resp_array(*elements: bytes | int | None) -> bytes:
     """Encode bulk strings, integers and null bulk strings as a RESP array."""

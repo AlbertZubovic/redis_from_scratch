@@ -1,6 +1,13 @@
 import pytest
 
-from resp import parse_resp_command, format_resp_simple_string, format_resp_bulk_string, format_resp_error, format_resp_integer, format_resp_array
+from resp import (
+    format_resp_array,
+    format_resp_bulk_string,
+    format_resp_error,
+    format_resp_integer,
+    format_resp_simple_string,
+    parse_resp_command,
+)
 
 
 # RESP formatting tests
@@ -15,7 +22,7 @@ from resp import parse_resp_command, format_resp_simple_string, format_resp_bulk
         pytest.param("OK!", b"+OK!\r\n", id="special-characters"),
         pytest.param("café", b"+caf\xc3\xa9\r\n", id="unicode"),
         pytest.param("a" * 1000, b"+" + b"a" * 1000 + b"\r\n", id="long-string"),
-    ]
+    ],
 )
 def test_format_resp_simple_string(input_value: str, expected: bytes) -> None:
     assert format_resp_simple_string(input_value) == expected
@@ -31,8 +38,10 @@ def test_format_resp_simple_string(input_value: str, expected: bytes) -> None:
         pytest.param(None, b"$-1\r\n", id="null"),
         pytest.param(b"123", b"$3\r\n123\r\n", id="numbers"),
         pytest.param(b"\x00\xff", b"$2\r\n\x00\xff\r\n", id="binary-data"),
-        pytest.param(b"hello\r\nworld", b"$12\r\nhello\r\nworld\r\n", id="embedded-crlf"),
-    ]
+        pytest.param(
+            b"hello\r\nworld", b"$12\r\nhello\r\nworld\r\n", id="embedded-crlf"
+        ),
+    ],
 )
 def test_format_resp_bulk_string(input_value: bytes | None, expected: bytes) -> None:
     assert format_resp_bulk_string(input_value) == expected
@@ -40,12 +49,15 @@ def test_format_resp_bulk_string(input_value: bytes | None, expected: bytes) -> 
 
 @pytest.mark.parametrize(
     "input_value, expected",
-        [pytest.param("error", b"-error\r\n", id="lowercase"),
-            pytest.param("ERROR", b"-ERROR\r\n", id="uppercase"),
-            pytest.param("Major Error", b"-Major Error\r\n", id="spaces"),
-            pytest.param("", b"-\r\n", id="empty-string"),
-            pytest.param("ERR unknown command", b"-ERR unknown command\r\n", id="redis-error"),
-        ],
+    [
+        pytest.param("error", b"-error\r\n", id="lowercase"),
+        pytest.param("ERROR", b"-ERROR\r\n", id="uppercase"),
+        pytest.param("Major Error", b"-Major Error\r\n", id="spaces"),
+        pytest.param("", b"-\r\n", id="empty-string"),
+        pytest.param(
+            "ERR unknown command", b"-ERR unknown command\r\n", id="redis-error"
+        ),
+    ],
 )
 def test_format_resp_error(input_value: str, expected: bytes) -> None:
     assert format_resp_error(input_value) == expected
@@ -53,13 +65,13 @@ def test_format_resp_error(input_value: str, expected: bytes) -> None:
 
 @pytest.mark.parametrize(
     "input_value, expected",
-        [
-            pytest.param(1, b":1\r\n", id="single-digit"),
-            pytest.param(10, b":10\r\n", id="multiple-digits"),
-            pytest.param(0, b":0\r\n", id="zero"),
-            pytest.param(-1, b":-1\r\n", id="negative"),
-            pytest.param(9223372036854775807, b":9223372036854775807\r\n", id="max-int64"),
-        ],
+    [
+        pytest.param(1, b":1\r\n", id="single-digit"),
+        pytest.param(10, b":10\r\n", id="multiple-digits"),
+        pytest.param(0, b":0\r\n", id="zero"),
+        pytest.param(-1, b":-1\r\n", id="negative"),
+        pytest.param(9223372036854775807, b":9223372036854775807\r\n", id="max-int64"),
+    ],
 )
 def test_format_resp_integer(input_value: int, expected: bytes) -> None:
     assert format_resp_integer(input_value) == expected
@@ -95,7 +107,9 @@ def test_format_resp_integer(input_value: int, expected: bytes) -> None:
         ),
     ],
 )
-def test_format_resp_array(input_value: tuple[bytes | int | None, ...], expected: bytes) -> None:
+def test_format_resp_array(
+    input_value: tuple[bytes | int | None, ...], expected: bytes
+) -> None:
     assert format_resp_array(*input_value) == expected
 
 
@@ -150,7 +164,9 @@ def test_format_resp_array(input_value: tuple[bytes | int | None, ...], expected
         ),
     ],
 )
-def test_parse_resp_command(input_value: bytes, expected: tuple[list[bytes], int] | None) -> None:
+def test_parse_resp_command(
+    input_value: bytes, expected: tuple[list[bytes], int] | None
+) -> None:
     assert parse_resp_command(input_value) == expected
 
 
@@ -200,10 +216,7 @@ def test_parse_resp_command_incomplete_headers(input_value: bytes) -> None:
 
 
 def test_parse_resp_command_pipelined():
-    buffer = (
-        b"*1\r\n$4\r\nPING\r\n"
-        b"*1\r\n$4\r\nPONG\r\n"
-    )
+    buffer = b"*1\r\n$4\r\nPING\r\n*1\r\n$4\r\nPONG\r\n"
 
     first_command, consumed = parse_resp_command(buffer)
     assert first_command == [b"PING"]

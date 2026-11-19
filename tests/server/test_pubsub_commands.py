@@ -19,13 +19,18 @@ def test_subscribe(run_command: Callable[[bytes], MagicMock]) -> None:
 def test_subscribe_multiple(run_command: Callable[[bytes], MagicMock]) -> None:
     sendall = run_command(b"*3\r\n$9\r\nSUBSCRIBE\r\n$4\r\nnews\r\n$6\r\nsports\r\n")
 
-    sendall.assert_called_once_with(b"*3\r\n$9\r\nsubscribe\r\n$4\r\nnews\r\n:1\r\n"b"*3\r\n$9\r\nsubscribe\r\n$6\r\nsports\r\n:2\r\n")
+    sendall.assert_called_once_with(
+        b"*3\r\n$9\r\nsubscribe\r\n$4\r\nnews\r\n:1\r\n"
+        b"*3\r\n$9\r\nsubscribe\r\n$6\r\nsports\r\n:2\r\n"
+    )
 
 
 def test_subscribe_no_arguments(run_command: Callable[[bytes], MagicMock]) -> None:
     sendall = run_command(b"*1\r\n$9\r\nSUBSCRIBE\r\n")
 
-    sendall.assert_called_once_with(b"-ERR wrong number of arguments for 'subscribe' command\r\n")
+    sendall.assert_called_once_with(
+        b"-ERR wrong number of arguments for 'subscribe' command\r\n"
+    )
 
 
 # UNSUBSCRIBE tests
@@ -46,7 +51,9 @@ def test_unsubscribe(server_state: dict[str, Any], mock_client: dict[str, Any]) 
     ]
 
 
-def test_unsubscribe_all(server_state: dict[str, Any], mock_client: dict[str, Any]) -> None:
+def test_unsubscribe_all(
+    server_state: dict[str, Any], mock_client: dict[str, Any]
+) -> None:
     mock_socket = mock_client["client_socket"]
 
     mock_socket.recv.side_effect = [
@@ -116,7 +123,11 @@ def test_publish_to_subscriber(server_state: dict[str, Any]) -> None:
 
     subscriber_socket.sendall.side_effect = subscriber_sendall
 
-    subscriber_thread = threading.Thread(target=handle_client, args=(subscriber_socket, ("127.0.0.1", 12345)), kwargs=server_state)
+    subscriber_thread = threading.Thread(
+        target=handle_client,
+        args=(subscriber_socket, ("127.0.0.1", 12345)),
+        kwargs=server_state,
+    )
 
     subscriber_thread.start()
 
@@ -128,7 +139,11 @@ def test_publish_to_subscriber(server_state: dict[str, Any]) -> None:
             b"",
         ]
 
-        handle_client(client_socket=publisher_socket, client_address=("127.0.0.1", 12346), **server_state)
+        handle_client(
+            client_socket=publisher_socket,
+            client_address=("127.0.0.1", 12346),
+            **server_state,
+        )
 
         publisher_socket.sendall.assert_called_once_with(b":1\r\n")
 
@@ -161,14 +176,18 @@ def test_publish_to_subscriber(server_state: dict[str, Any]) -> None:
     ],
     ids=["no-arguments", "missing-message", "too-many-arguments"],
 )
-def test_publish_invalid(run_command: Callable[[bytes], MagicMock], command: bytes, expected: bytes) -> None:
+def test_publish_invalid(
+    run_command: Callable[[bytes], MagicMock], command: bytes, expected: bytes
+) -> None:
     sendall = run_command(command)
 
     sendall.assert_called_once_with(expected)
 
 
 # Subscribed-mode tests
-def test_ping_subscribed(server_state: dict[str, Any], mock_client: dict[str, Any]) -> None:
+def test_ping_subscribed(
+    server_state: dict[str, Any], mock_client: dict[str, Any]
+) -> None:
     mock_socket = mock_client["client_socket"]
 
     mock_socket.recv.side_effect = [
@@ -183,6 +202,3 @@ def test_ping_subscribed(server_state: dict[str, Any], mock_client: dict[str, An
         call(b"*3\r\n$9\r\nsubscribe\r\n$4\r\nnews\r\n:1\r\n"),
         call(b"*2\r\n$4\r\npong\r\n$5\r\nhello\r\n"),
     ]
-
-
-

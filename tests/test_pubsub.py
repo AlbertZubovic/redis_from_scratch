@@ -21,7 +21,9 @@ def clients() -> tuple[ClientConnection, ClientConnection]:
 
 
 # SUBSCRIBE tests
-def test_subscribe(pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]) -> None:
+def test_subscribe(
+    pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]
+) -> None:
     client_a, client_b = clients
 
     pubsub.subscribe(b"news", client_a)
@@ -30,7 +32,9 @@ def test_subscribe(pubsub: PubSub, clients: tuple[ClientConnection, ClientConnec
     assert pubsub.get_subscribers(b"news") == {client_a, client_b}
 
 
-def test_subscribe_duplicate(pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]) -> None:
+def test_subscribe_duplicate(
+    pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]
+) -> None:
     client_a, _ = clients
 
     pubsub.subscribe(b"news", client_a)
@@ -39,7 +43,9 @@ def test_subscribe_duplicate(pubsub: PubSub, clients: tuple[ClientConnection, Cl
     assert pubsub.get_subscribers(b"news") == {client_a}
 
 
-def test_subscribe_multiple_channels(pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]) -> None:
+def test_subscribe_multiple_channels(
+    pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]
+) -> None:
     client_a, _ = clients
 
     pubsub.subscribe(b"news", client_a)
@@ -49,7 +55,9 @@ def test_subscribe_multiple_channels(pubsub: PubSub, clients: tuple[ClientConnec
     assert pubsub.get_subscribers(b"notification") == {client_a}
 
 
-def test_subscribe_channels_isolation(pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]) -> None:
+def test_subscribe_channels_isolation(
+    pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]
+) -> None:
     client_a, client_b = clients
 
     pubsub.subscribe(b"news", client_a)
@@ -59,7 +67,9 @@ def test_subscribe_channels_isolation(pubsub: PubSub, clients: tuple[ClientConne
     assert pubsub.get_subscribers(b"notification") == {client_b}
 
 
-def test_unsubscribe(pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]) -> None:
+def test_unsubscribe(
+    pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]
+) -> None:
     client_a, client_b = clients
 
     pubsub.subscribe(b"news", client_a)
@@ -71,7 +81,9 @@ def test_unsubscribe(pubsub: PubSub, clients: tuple[ClientConnection, ClientConn
 
 
 # UNSUBSCRIBE tests
-def test_unsubscribe_last_client(pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]) -> None:
+def test_unsubscribe_last_client(
+    pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]
+) -> None:
     client_a, _ = clients
 
     pubsub.subscribe(b"news", client_a)
@@ -80,7 +92,9 @@ def test_unsubscribe_last_client(pubsub: PubSub, clients: tuple[ClientConnection
     assert pubsub.channels == {}
 
 
-def test_unsubscribe_nonexistent(pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]) -> None:
+def test_unsubscribe_nonexistent(
+    pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]
+) -> None:
     client_a, _ = clients
 
     pubsub.unsubscribe(b"news", client_a)
@@ -88,7 +102,9 @@ def test_unsubscribe_nonexistent(pubsub: PubSub, clients: tuple[ClientConnection
     assert pubsub.channels == {}
 
 
-def test_unsubscribe_client_not_subscribed(pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]) -> None:
+def test_unsubscribe_client_not_subscribed(
+    pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]
+) -> None:
     client_a, client_b = clients
 
     pubsub.subscribe(b"news", client_a)
@@ -103,7 +119,9 @@ def test_get_subscribers_nonexistent(pubsub: PubSub) -> None:
     assert pubsub.get_subscribers(b"unknown") == set()
 
 
-def test_get_subscribers_copy(pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]) -> None:
+def test_get_subscribers_copy(
+    pubsub: PubSub, clients: tuple[ClientConnection, ClientConnection]
+) -> None:
     client_a, _ = clients
 
     pubsub.subscribe(b"news", client_a)
@@ -112,4 +130,3 @@ def test_get_subscribers_copy(pubsub: PubSub, clients: tuple[ClientConnection, C
     subscribers.clear()
 
     assert pubsub.get_subscribers(b"news") == {client_a}
-

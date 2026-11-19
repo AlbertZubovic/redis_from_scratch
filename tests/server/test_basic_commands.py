@@ -22,7 +22,9 @@ import pytest
     ],
     ids=["ping", "ping-with-message", "too-many-arguments"],
 )
-def test_ping(run_command: Callable[[bytes], MagicMock], command: bytes, expected: bytes) -> None:
+def test_ping(
+    run_command: Callable[[bytes], MagicMock], command: bytes, expected: bytes
+) -> None:
     sendall = run_command(command)
 
     sendall.assert_called_once_with(expected)
@@ -46,7 +48,9 @@ def test_ping(run_command: Callable[[bytes], MagicMock], command: bytes, expecte
     ],
     ids=["valid", "no-arguments", "too-many-arguments"],
 )
-def test_echo(run_command: Callable[[bytes], MagicMock], command: bytes, expected: bytes) -> None:
+def test_echo(
+    run_command: Callable[[bytes], MagicMock], command: bytes, expected: bytes
+) -> None:
     sendall = run_command(command)
 
     sendall.assert_called_once_with(expected)
